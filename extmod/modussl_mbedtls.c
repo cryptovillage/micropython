@@ -58,6 +58,7 @@ typedef struct _mp_obj_ssl_socket_t {
 
 struct ssl_args {
     mp_arg_val_t key;
+    mp_arg_val_t ca_certs;
     mp_arg_val_t cert;
     mp_arg_val_t server_side;
     mp_arg_val_t server_hostname;
@@ -147,7 +148,6 @@ STATIC mp_obj_ssl_socket_t *socket_new(mp_obj_t sock, struct ssl_args *args) {
         goto cleanup;
     }
 
-    mbedtls_ssl_conf_authmode(&o->conf, MBEDTLS_SSL_VERIFY_NONE);
     mbedtls_ssl_conf_rng(&o->conf, mbedtls_ctr_drbg_random, &o->ctr_drbg);
     #ifdef MBEDTLS_DEBUG_C
     mbedtls_ssl_conf_dbg(&o->conf, mbedtls_debug, NULL);
@@ -183,6 +183,14 @@ STATIC mp_obj_ssl_socket_t *socket_new(mp_obj_t sock, struct ssl_args *args) {
 
         ret = mbedtls_ssl_conf_own_cert(&o->conf, &o->cert, &o->pkey);
         assert(ret == 0);
+    }
+
+    if (args->ca_certs.u_obj != MP_OBJ_NULL) {
+    	size_t cert_len;
+    	const byte *ca_cert = (const byte*)mp_obj_str_get_data(args->ca_certs.u_obj, &cert_len);
+    	ret = mbedtls_x509_crt_parse(&o->cacert, ca_cert, cert_len + 1);
+    	assert(ret == 0);
+    	mbedtls_ssl_conf_ca_chain(&o->conf, &o->cacert, NULL);
     }
 
     while ((ret = mbedtls_ssl_handshake(&o->ssl)) != 0) {
@@ -325,6 +333,7 @@ STATIC mp_obj_t mod_ssl_wrap_socket(size_t n_args, const mp_obj_t *pos_args, mp_
     // TODO: Implement more args
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_key, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
+		{ MP_QSTR_ca_certs, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
         { MP_QSTR_cert, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
         { MP_QSTR_server_side, MP_ARG_KW_ONLY | MP_ARG_BOOL, {.u_bool = false} },
         { MP_QSTR_server_hostname, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = mp_const_none} },
